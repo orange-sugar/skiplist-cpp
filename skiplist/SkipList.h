@@ -47,8 +47,6 @@ class SkipList
 
     void createNode(int level, Node<K, V> *&node, K key, V val);
 
-    void parseNode(K* key, V* value, std::string keySrc, std::string valueSrc);
-
     int level_;
     Node<K, V>* header_;
     Node<K, V>* tailer_;
@@ -250,6 +248,7 @@ void SkipList<K, V>::print() const
   for (int i = 0; i <= level_; ++i)
   {
     std::cout << "level " << i << ": ";
+    std::cout << "header-> ";
     Node<K, V>* tmp = header_;
     tmp = tmp->forward_[i];
     while (tmp != tailer_)
@@ -257,6 +256,7 @@ void SkipList<K, V>::print() const
       std::cout << tmp->getKey() << ":" << tmp->getValue() << ";";
       tmp = tmp->forward_[i];
     }
+    std::cout << " ->tailer";
     std::cout << std::endl;
   }
 }
