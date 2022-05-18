@@ -6,8 +6,13 @@
 
 #include <assert.h>
 
+#include <any>
+#include <climits>
 #include <cstddef>
+#include <fstream>
 #include <iostream>
+
+static const std::string kDelimiter = ":";
 
 template<typename K, typename V>
 class SkipList
@@ -28,6 +33,10 @@ class SkipList
 
     void print() const;
 
+    void loadFromFile(std::string filename);
+
+    void dumpToFile(std::string filename);
+
   private:
 
     void initateList(K tailerKey);
@@ -38,6 +47,8 @@ class SkipList
 
     void createNode(int level, Node<K, V> *&node, K key, V val);
 
+    void parseNode(K* key, V* value, std::string keySrc, std::string valueSrc);
+
     int level_;
     Node<K, V>* header_;
     Node<K, V>* tailer_;
@@ -47,6 +58,9 @@ class SkipList
     static const int MAX_LEVEL = 16;
 
     RandomGenerator rnd_;
+
+    std::ifstream is_;
+    std::ofstream os_;
 };
 
 
@@ -83,7 +97,7 @@ void SkipList<K, V>::initateList(K tailerKey)
 template<typename K, typename V>
 void SkipList<K, V>::createNode(int level, Node<K, V>*& node)
 {
-  node = new Node<K, V>{NULL, NULL};
+  node = new Node<K, V>{{}, {}};
   node->forward_ = new Node<K, V> *[level + 1];
   node->nodeLevel_ = level;
   assert(node != nullptr);
@@ -183,6 +197,7 @@ bool SkipList<K, V>::insert(K key, V value)
   return true;
 }
 
+// 移除节点
 template<typename K, typename V>
 bool SkipList<K, V>::remove(K key, V* value)
 {
@@ -227,6 +242,7 @@ bool SkipList<K, V>::remove(K key, V* value)
   return true;
 }
 
+// 打印跳表
 template<typename K, typename V>
 void SkipList<K, V>::print() const
 {
@@ -242,6 +258,56 @@ void SkipList<K, V>::print() const
       tmp = tmp->forward_[i];
     }
     std::cout << std::endl;
+  }
+}
+
+// 从一行中解析key和value
+static void readNode(std::string* key, std::string* value, std::string &line)
+{
+  size_t posDelimiter;
+  posDelimiter = line.find(kDelimiter);
+
+  *key = line.substr(0, posDelimiter - 0);
+  *value = line.substr(posDelimiter + 1, line.size() - 1);
+}
+
+// 从文件导入
+template<typename K, typename V>
+void SkipList<K, V>::loadFromFile(std::string filename)
+{
+  is_.open(filename, std::ios::in);
+  if (is_.is_open())
+  {
+    std::string line;
+    std::string key;
+    std::string val;
+    while (getline(is_, line))
+    {
+      if (line.empty())
+      {
+        continue;
+      }
+      readNode(&key, &val, line);
+
+      insert(stoi(key), val);
+    }
+  }
+  else   
+  {
+    printf("open file failed.");
+  }
+}
+
+// 保存至文件
+template<typename K, typename V>
+void SkipList<K, V>::dumpToFile(std::string filename)
+{
+  os_.open(filename, std::ios::out | std::ios::trunc);
+  Node<K, V>* tmp = header_;
+  while (tmp->forward_[0] != tailer_)
+  {
+    os_ << tmp->forward_[0]->key_ << kDelimiter << tmp->forward_[0]->value_ << std::endl;
+    tmp = tmp->forward_[0];
   }
 }
 
