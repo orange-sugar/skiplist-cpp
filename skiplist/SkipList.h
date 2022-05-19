@@ -53,7 +53,7 @@ class SkipList
 
     size_t size_;
 
-    static const int MAX_LEVEL = 16;
+    static const int MAX_LEVEL = 4;
 
     RandomGenerator rnd_;
 
@@ -79,6 +79,7 @@ template<typename K, typename V>
 void SkipList<K, V>::initateList(K tailerKey)
 {
   createNode(0, tailer_);
+  // tailer_->forward_[0] = nullptr;
 
   tailer_->key_ = tailerKey;
   level_ = 0;
@@ -97,6 +98,7 @@ void SkipList<K, V>::createNode(int level, Node<K, V>*& node)
 {
   node = new Node<K, V>{{}, {}};
   node->forward_ = new Node<K, V> *[level + 1];
+  node->forward_[0] = nullptr;
   node->nodeLevel_ = level;
   assert(node != nullptr);
 }
@@ -109,6 +111,10 @@ void SkipList<K, V>::createNode(int level, Node<K, V>*& node, K key, V value)
   if (level > 0)
   {
     node->forward_ = new Node<K, V>* [level + 1];
+    for (int i = 0; i <= level; ++i)
+    {
+      node->forward_[i] = nullptr;
+    }
   }
   node->nodeLevel_ = level;
   assert(node != nullptr);
