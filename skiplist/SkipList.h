@@ -2,15 +2,16 @@
 #define SKIPLIST_SKIPLIST_H
 
 #include "Node.h"
-#include "RandomGenerator.h"
 
 #include <assert.h>
 
 #include <any>
 #include <climits>
 #include <cstddef>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 
 static const std::string kDelimiter = ":";
 
@@ -23,9 +24,9 @@ class SkipList
 
     Node<K, V> *find(K key) const;
 
-    bool insert(K key, V val);
+    bool insert(const K key, const V val);
 
-    bool remove(K key, V* val);
+    bool remove(const K key, V* val);
 
     int size() const { return size_; }
 
@@ -43,9 +44,7 @@ class SkipList
 
     void destroyList();
 
-    void createNode(int level, Node<K, V> *&node);
-
-    void createNode(int level, Node<K, V> *&node, K key, V val);
+    int getRandomLevel();
 
     int level_;
     Node<K, V>* header_;
@@ -53,12 +52,12 @@ class SkipList
 
     size_t size_;
 
-    static const int MAX_LEVEL = 4;
-
-    RandomGenerator rnd_;
+    static const int kMaxLevel = 16;
 
     std::ifstream is_;
     std::ofstream os_;
+
+    std::mutex mutex_;
 };
 
 
@@ -78,46 +77,17 @@ SkipList<K, V>::~SkipList()
 template<typename K, typename V>
 void SkipList<K, V>::initateList(K tailerKey)
 {
-  createNode(0, tailer_);
-  // tailer_->forward_[0] = nullptr;
+  tailer_ = new Node<K, V>{tailerKey, {}, 0};
 
-  tailer_->key_ = tailerKey;
   level_ = 0;
 
-  createNode(MAX_LEVEL, header_);
-  for (int i = 0; i < MAX_LEVEL; ++i)
+  header_ = new Node<K, V>{{}, {}, kMaxLevel};
+
+  for (int i = 0; i <= kMaxLevel; ++i)
   {
     header_->forward_[i] = tailer_;
   }
   size_ = 0;
-}
-
-// 创建无值节点
-template<typename K, typename V>
-void SkipList<K, V>::createNode(int level, Node<K, V>*& node)
-{
-  node = new Node<K, V>{{}, {}};
-  node->forward_ = new Node<K, V> *[level + 1];
-  node->forward_[0] = nullptr;
-  node->nodeLevel_ = level;
-  assert(node != nullptr);
-}
-
-// 创建带值节点
-template<typename K, typename V>
-void SkipList<K, V>::createNode(int level, Node<K, V>*& node, K key, V value)
-{
-  node = new Node<K, V>(key, value);
-  if (level > 0)
-  {
-    node->forward_ = new Node<K, V>* [level + 1];
-    for (int i = 0; i <= level; ++i)
-    {
-      node->forward_[i] = nullptr;
-    }
-  }
-  node->nodeLevel_ = level;
-  assert(node != nullptr);
 }
 
 // 销毁跳表，释放内存
@@ -157,28 +127,28 @@ Node<K, V>* SkipList<K, V>::find(K key) const
 
 // 插入节点
 template<typename K, typename V>
-bool SkipList<K, V>::insert(K key, V value)
+bool SkipList<K, V>::insert(const K key, const V value)
 {
-  Node<K, V>* update[MAX_LEVEL];
-  Node<K, V>* node = header_;
+  std::lock_guard<std::mutex> lock(mutex_);
+  Node<K, V>* update[kMaxLevel+1];
+  Node<K, V>* current = header_;
 
   for (int i = level_; i >= 0; --i)
   {
-    while ((node->forward_[i])->key_ < key)
+    while ((current->forward_[i])->key_ < key)
     {
-      node = node->forward_[i];
+      current = current->forward_[i];
     }
-    update[i] = node;
+    update[i] = current;
   }
-  node = node->forward_[0];
+  current = current->forward_[0];
 
-  if (node->key_ == key)
+  if (current->key_ == key)
   {
     return false;
   }
 
-  int nodeLevel = rnd_.nextInt(1, MAX_LEVEL);
-  // nodeLevel = nodeLevel == 0 ? 1 : nodeLevel;
+  int nodeLevel = getRandomLevel();
 
   if (nodeLevel > level_)
   {
@@ -186,14 +156,12 @@ bool SkipList<K, V>::insert(K key, V value)
     update[nodeLevel] = header_;
   }
 
-  Node<K, V>* newNode;
-  createNode(nodeLevel, newNode, key, value);
+  Node<K, V>* newNode = new Node<K, V>{key, value, nodeLevel};
 
   for (int i = nodeLevel; i >= 0; --i)
   {
-    node = update[i];
-    newNode->forward_[i] = node->forward_[i];
-    node->forward_[i] = newNode;
+    newNode->forward_[i] = update[i]->forward_[i];
+    update[i]->forward_[i] = newNode;
   }
 
   ++size_;
@@ -203,9 +171,10 @@ bool SkipList<K, V>::insert(K key, V value)
 
 // 移除节点
 template<typename K, typename V>
-bool SkipList<K, V>::remove(K key, V* value)
+bool SkipList<K, V>::remove(const K key, V* value)
 {
-  Node<K, V>* update[MAX_LEVEL];
+  std::lock_guard<std::mutex> lock(mutex_);
+  Node<K, V>* update[kMaxLevel + 1];
   Node<K, V>* node = header_;
 
   for (int i = level_; i >= 0; --i)
@@ -281,7 +250,7 @@ static void readNode(std::string* key, std::string* value, std::string &line)
 template<typename K, typename V>
 void SkipList<K, V>::loadFromFile(std::string filename)
 {
-  is_.open(filename, std::ios::in);
+  is_.open(filename, std::ios::in | std::ios::binary);
   if (is_.is_open())
   {
     std::string line;
@@ -315,6 +284,17 @@ void SkipList<K, V>::dumpToFile(std::string filename)
     os_ << tmp->forward_[0]->key_ << kDelimiter << tmp->forward_[0]->value_ << std::endl;
     tmp = tmp->forward_[0];
   }
+}
+
+template<typename K, typename  V>
+int SkipList<K, V>::getRandomLevel()
+{
+  int nodeLevel = 1;
+  while (rand() % 2) {
+      nodeLevel++;
+  }
+  nodeLevel = (nodeLevel < kMaxLevel) ? nodeLevel : kMaxLevel;
+  return nodeLevel;
 }
 
 #endif	// SKIPLIST_SKIPLIST_H

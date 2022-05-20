@@ -11,7 +11,7 @@ class Node
 
   public:
     Node() {}
-    Node(K k, V v);
+    Node(const K k, const V v, int level = 0);
     ~Node();
 
     K getKey() const;
@@ -25,13 +25,13 @@ class Node
 };
 
 template<typename K, typename V>
-Node<K, V>::Node(const K k, const V v)
+Node<K, V>::Node(const K k, const V v, int level)
   : key_(k),
     value_(v),
-    forward_(nullptr),
-    nodeLevel_(-1)
+    forward_(new Node<K, V>* [level + 1]),
+    nodeLevel_(level)
 {
-  
+  memset(forward_, 0, sizeof (Node<K, V>*) * (level + 1));
 }
 
 template<typename K, typename V>
